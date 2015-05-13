@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">金山云推送</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="btn_capture">Publish</string>
+    <string name="btn_stop">Stop</string>
+</resources>
