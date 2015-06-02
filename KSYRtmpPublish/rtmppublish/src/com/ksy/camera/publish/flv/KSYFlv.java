@@ -5,6 +5,7 @@ import java.util.ArrayList;
 
 import android.media.MediaCodec;
 import android.media.MediaFormat;
+import android.nfc.Tag;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
@@ -71,13 +72,13 @@ public class KSYFlv {
 
 	public void writeAudioSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) throws Exception {
 
-		int pts = (int) (bi.presentationTimeUs / 1000);
+		int pts = (int) (bi.presentationTimeUs);
 		int dts = pts;
 
-		byte[] frame = new byte[bi.size + 2];
+		byte[] frame = new byte[bi.size + 2 + 11 + 4];
 		byte aac_packet_type = 1; // 1 = AAC raw
 		if (aac_specific_config == null) {
-			frame = new byte[4];
+			frame = new byte[4 + 11 + 4];
 
 			// @see aac-mp4a-format-ISO_IEC_14496-3+2001.pdf
 			// AudioSpecificConfig (), page 33
@@ -94,7 +95,7 @@ public class KSYFlv {
 				samplingFrequencyIndex = 0x0a;
 			}
 			ch |= (samplingFrequencyIndex >> 1) & 0x07;
-			frame[2] = ch;
+			frame[2 + 11] = ch;
 
 			ch = (byte) ((samplingFrequencyIndex << 7) & 0x80);
 			// 7bits left.
@@ -112,12 +113,12 @@ public class KSYFlv {
 			// frameLengthFlag; 1 bslbf
 			// dependsOnCoreCoder; 1 bslbf
 			// extensionFlag; 1 bslbf
-			frame[3] = ch;
+			frame[3 + 11] = ch;
 
 			aac_specific_config = frame;
 			aac_packet_type = 0; // 0 = AAC sequence header
 		} else {
-			bb.get(frame, 2, frame.length - 2);
+			bb.get(frame, 2 + 11, frame.length - 2 - 11 - 4);
 		}
 
 		byte sound_format = 10; // AAC
@@ -142,21 +143,38 @@ public class KSYFlv {
 		audio_header |= (sound_rate << 2) & 0x0c;
 		audio_header |= (sound_format << 4) & 0xf0;
 
-		frame[0] = audio_header;
-		frame[1] = aac_packet_type;
-
+//		frame[0 + 11] = audio_header;
+//		frame[1 + 11] = aac_packet_type;
+		
 		KSYFlvFrameBytes tag = new KSYFlvFrameBytes();
 		tag.frame = ByteBuffer.wrap(frame);
 		tag.size = frame.length;
+		
+		tag.frame.rewind();
+		int tag_size = ((bi.size+2) & 0x00FFFFFF) | ((KSYCodecFlvTag.Audio & 0x1F) << 24);
+		tag.frame.putInt(tag_size);
+		// Timestamp UI24
+		// TimestampExtended UI8
+		int time = (dts << 8) & 0xFFFFFF00 | ((dts >> 24) & 0x000000FF);
+		tag.frame.putInt(time);
+		// StreamID UI24 Always 0.
+		tag.frame.put((byte) 0);
+		tag.frame.put((byte) 0);
+		tag.frame.put((byte) 0);
+		tag.frame.put((byte) audio_header);
+		tag.frame.put((byte) aac_packet_type);
+		
+		tag.frame.putInt(tag.frame.limit() - 4, tag.frame.limit() - 4);
+		tag.frame.rewind();
 
-		int timestamp = dts;
+		//int timestamp = dts;
 
-		rtmp_write_packet(KSYCodecFlvTag.Audio, timestamp, 0, aac_packet_type, tag);
+		rtmp_write_packet(KSYCodecFlvTag.Audio, dts, 0, aac_packet_type, tag);
 	}
 
 	public void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) throws Exception {
 
-		int pts = (int) (bi.presentationTimeUs / 1000);
+		int pts = (int) (bi.presentationTimeUs);
 		int dts = pts;
 
 		ArrayList<KSYFlvFrameBytes> ibps = new ArrayList<KSYFlvFrameBytes>();
@@ -248,8 +266,8 @@ public class KSYFlv {
 		KSYFlvFrameBytes flv_tag = avc.mux_avc2flv(frames, frame_type, avc_packet_type, dts, pts);
 
 		// the timestamp in rtmp message header is dts.
-		int timestamp = dts;
-		rtmp_write_packet(KSYCodecFlvTag.Video, timestamp, frame_type, avc_packet_type, flv_tag);
+		//int timestamp = dts;
+		rtmp_write_packet(KSYCodecFlvTag.Video, dts, frame_type, avc_packet_type, flv_tag);
 
 		// reset sps and pps.
 		h264_sps_changed = false;
@@ -269,14 +287,14 @@ public class KSYFlv {
 		int avc_packet_type = KSYCodecVideoAVCType.NALU;
 		KSYFlvFrameBytes flv_tag = avc.mux_avc2flv(ibps, frame_type, avc_packet_type, dts, pts);
 
-		if (frame_type == KSYCodecVideoAVCFrame.KeyFrame) {
+		//if (frame_type == KSYCodecVideoAVCFrame.KeyFrame) {
 			// Log.i(TAG, String.format("flv: keyframe %dB, dts=%d",
 			// flv_tag.size, dts));
-		}
+		//}
 
 		// the timestamp in rtmp message header is dts.
-		int timestamp = dts;
-		rtmp_write_packet(KSYCodecFlvTag.Video, timestamp, frame_type, avc_packet_type, flv_tag);
+		//int timestamp = dts;
+		rtmp_write_packet(KSYCodecFlvTag.Video, dts, frame_type, avc_packet_type, flv_tag);
 	}
 
 	private void rtmp_write_packet(int type, int dts, int frame_type, int avc_aac_type, KSYFlvFrameBytes tag) {

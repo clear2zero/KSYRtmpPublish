@@ -118,7 +118,6 @@ public class KSYH264Stream {
 			// size,
 			// so we always set it to 0x03.
 			hdr.frame.put((byte) 0x03);
-
 			// reset the buffer.
 			hdr.frame.rewind();
 			frames.add(hdr);
@@ -135,7 +134,7 @@ public class KSYH264Stream {
 			sps_hdr.frame.put((byte) 0x01);
 			// sequenceParameterSetLength
 			sps_hdr.frame.putShort((short) sps.length);
-
+			
 			sps_hdr.frame.rewind();
 			frames.add(sps_hdr);
 
@@ -184,9 +183,20 @@ public class KSYH264Stream {
 			flv_tag.size += frame.size;
 		}
 
-		flv_tag.frame = ByteBuffer.allocate(flv_tag.size);
+		flv_tag.frame = ByteBuffer.allocate(flv_tag.size + 11 + 4);
+		
+		int tag_size = (flv_tag.size & 0x00FFFFFF) | ((KSYCodecFlvTag.Video & 0x1F) << 24);
+		flv_tag.frame.putInt(tag_size);
+		// Timestamp UI24
+		// TimestampExtended UI8
+		int time = (dts << 8) & 0xFFFFFF00 | ((dts >> 24) & 0x000000FF);
+		flv_tag.frame.putInt(time);
+		// StreamID UI24 Always 0.
+		flv_tag.frame.put((byte) 0);
+		flv_tag.frame.put((byte) 0);
+		flv_tag.frame.put((byte) 0);
 
-		// @see: E.4.3 Video Tags, video_file_format_spec_v10_1.pdf, page 78
+			// @see: E.4.3 Video Tags, video_file_format_spec_v10_1.pdf, page 78
 		// Frame Type, Type of video frame.
 		// CodecID, Codec Identifier.
 		// set the rtmp header
@@ -207,16 +217,18 @@ public class KSYH264Stream {
 		// h.264 raw data.
 		for (int i = 0; i < frames.size(); i++) {
 			KSYFlvFrameBytes frame = frames.get(i);
+			//flv_tag.frame.put(frame.frame.duplicate());
 			byte[] frame_bytes = new byte[frame.size];
 			frame.frame.get(frame_bytes);
 			flv_tag.frame.put(frame_bytes);
 		}
 
+		flv_tag.frame.putInt(flv_tag.size + 11);
 		// reset the buffer.
 		flv_tag.frame.rewind();
 
-		// Log.i(TAG, String.format("flv tag muxed, %dB", flv_tag.size));
-		// KSYHttpFlv.KSY_print_bytes(TAG, flv_tag.frame, 128);
+		//Log.i("guisheng", String.format("flv tag muxed, %dB", (flv_tag.size + 11 + 4)));
+		//KSYHttpFlvClient.KSY_print_bytes("guisheng", flv_tag.frame, 128);
 
 		return flv_tag;
 	}
@@ -231,7 +243,7 @@ public class KSYH264Stream {
 			KSYAnnexbSearch tbbsc = utils.startswith_annexb(bb, bi);
 			if (!tbbsc.match || tbbsc.nb_start_code < 3) {
 				Log.e(Constants.TAG, "annexb not match.");
-				KSYHttpFlvClient.srs_print_bytes(Constants.TAG, bb, 16);
+				KSYHttpFlvClient.KSY_print_bytes(Constants.TAG, bb, 16);
 				throw new Exception(String.format("annexb not match for %dB, pos=%d", bi.size, bb.position()));
 			}
 
@@ -254,9 +266,9 @@ public class KSYH264Stream {
 
 			tbb.size = bb.position() - pos;
 			if (bb.position() < bi.size) {
-				Log.i(Constants.TAG, String.format("annexb multiple match ok, pts=%d", bi.presentationTimeUs / 1000));
-				KSYHttpFlvClient.srs_print_bytes(Constants.TAG, tbbs, 16);
-				KSYHttpFlvClient.srs_print_bytes(Constants.TAG, bb.slice(), 16);
+				Log.i(Constants.TAG, String.format("annexb multiple match ok, pts=%d", bi.presentationTimeUs));
+				KSYHttpFlvClient.KSY_print_bytes(Constants.TAG, tbbs, 16);
+				KSYHttpFlvClient.KSY_print_bytes(Constants.TAG, bb.slice(), 16);
 			}
 			// Log.i(TAG, String.format("annexb match %d bytes", tbb.size));
 			break;

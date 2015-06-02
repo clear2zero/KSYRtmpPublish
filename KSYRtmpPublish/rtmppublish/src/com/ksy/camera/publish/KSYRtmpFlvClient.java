@@ -1,8 +1,5 @@
 package com.ksy.camera.publish;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -11,7 +8,6 @@ import java.util.Comparator;
 
 import android.media.MediaCodec;
 import android.media.MediaFormat;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -44,14 +40,21 @@ public class KSYRtmpFlvClient {
 	private int nb_videos;
 	private int nb_audios;
 
-	private BufferedOutputStream bos;
+	// private BufferedOutputStream bos;
 
 	private static final int VIDEO_TRACK = 100;
 	private static final int AUDIO_TRACK = 101;
 
 	private boolean connected = false;
+	private boolean isFristFrame = false;
 
-	public KSYRtmpFlvClient(String path, int format) {
+	private final byte[] cachedBuffer;
+	private int cachedSize;
+
+	private final ByteBuffer pps = ByteBuffer.allocate(4);
+	private final ByteBuffer th = ByteBuffer.allocate(11);
+
+	public KSYRtmpFlvClient(String path) {
 
 		nb_videos = 0;
 		nb_audios = 0;
@@ -60,6 +63,8 @@ public class KSYRtmpFlvClient {
 		url = path;
 		flv = new KSYFlv();
 		cache = new ArrayList<KSYFlvFrame>();
+		cachedBuffer = new byte[4096];
+		cachedSize = 0;
 		loadLibs();
 	}
 
@@ -145,7 +150,7 @@ public class KSYRtmpFlvClient {
 		// SrsHttpFlv.srs_print_bytes(TAG, byteBuf, bufferInfo.size);
 
 		if (bufferInfo.offset > 0) {
-			Log.w(Constants.TAG, String.format("encoded frame %dB, offset=%d pts=%dms", bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs / 1000));
+			Log.w(Constants.TAG, String.format("encoded frame %dB, offset=%d pts=%dms", bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs));
 		}
 
 		if (VIDEO_TRACK == trackIndex) {
@@ -159,23 +164,18 @@ public class KSYRtmpFlvClient {
 
 		Log.e("guoli", "worker: disconnect SRS begin.");
 		clearCache();
-		if (bos != null) {
-			try {
-				bos.close();
-			} catch (IOException e) {
-			}
-			bos = null;
-		}
 		_close();
 		connected = false;
+		isFristFrame = true;
 		Log.e("guoli", "worker: disconnect SRS ok.");
 	}
 
 	private void clearCache() {
 
 		nb_videos = 0;
-		nb_audios = 0;
+		nb_audios = 2;
 		cache.clear();
+		cachedSize = 0;
 		sequenceHeaderOk = false;
 	}
 
@@ -188,33 +188,17 @@ public class KSYRtmpFlvClient {
 		Log.e("guoli", "open begin");
 		int conncode = _open();
 		connected = conncode == 0 ? true : false;
-		File file = new File(Environment.getExternalStorageDirectory(), "log.flv");
-		file.createNewFile();
-		bos = new BufferedOutputStream(new FileOutputStream(file));
+		// File file = new File(Environment.getExternalStorageDirectory(),
+		// "log.flv");
+		// file.createNewFile();
+		// bos = new BufferedOutputStream(new FileOutputStream(file));
 		Log.e("guoli", "connect code :" + conncode);
 
 		// write 13B header
 		// 9bytes header and 4bytes first previous-tag-size
-		byte[] flv_header = new byte[] {
-				'F', 'L', 'V', // Signatures "FLV"
-				(byte) 0x01, // File version (for example, 0x01 for FLV version
-				// 1)
-				(byte) 0x05, // 4, audio; 1, video; 5 audio+video.
-				(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x09, // DataOffset
-				// UI32 The
-				// length of
-				// this
-				// header in
-				// bytes
-				(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00
-		};
-
-		_write(flv_header, flv_header.length);
-		bos.write(flv_header);
-		bos.flush();
-		Log.i("guoli", String.format("worker: flv header ok."));
 
 		clearCache();
+		cachedSize = 0;
 
 	}
 
@@ -327,63 +311,39 @@ public class KSYRtmpFlvClient {
 				nb_audios--;
 			}
 
-			if (frame.is_keyframe()) {
-				Log.i(Constants.TAG, String.format("worker: got frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
-						frame.type, frame.dts, frame.tag.size, nb_videos, nb_audios));
-			} else {
-				// Log.i(TAG,
-				// String.format("worker: got frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
-				// frame.type, frame.dts, frame.tag.size, nb_videos,
-				// nb_audios));
-			}
-
-			// write the 11B flv tag header
-			ByteBuffer th = ByteBuffer.allocate(11);
 			// Reserved UB [2]
 			// Filter UB [1]
 			// TagType UB [5]
 			// DataSize UI24
-			int tag_size = (frame.tag.size & 0x00FFFFFF) | ((frame.type & 0x1F) << 24);
-			th.putInt(tag_size);
-			// Timestamp UI24
-			// TimestampExtended UI8
-			int time = (frame.dts << 8) & 0xFFFFFF00 | ((frame.dts >> 24) & 0x000000FF);
-			th.putInt(time);
-			// StreamID UI24 Always 0.
-			th.put((byte) 0);
-			th.put((byte) 0);
-			th.put((byte) 0);
-			byte[] thbs = th.array();
+			// th.rewind();
+			// int tag_size = (frame.tag.size & 0x00FFFFFF) | ((frame.type &
+			// 0x1F) << 24);
+			// th.putInt(tag_size);
+			// // Timestamp UI24
+			// // TimestampExtended UI8
+			// int time = (frame.dts << 8) & 0xFFFFFF00 | ((frame.dts >> 24) &
+			// 0x000000FF);
+			// th.putInt(time);
+			// // StreamID UI24 Always 0.
+			// th.put((byte) 0);
+			// th.put((byte) 0);
+			// th.put((byte) 0);
+			// byte[] thbs = th.array();
+			// _write(thbs, thbs.length);
 
 			// write the flv tag data.
+			frame.tag.frame.rewind();
 			byte[] data = frame.tag.frame.array();
+			_write(data, data.length);
 
 			// write the 4B previous tag size.
 			// @remark, we append the tag size, this is different to SRS which
 			// write RTMP packet.
-			ByteBuffer pps = ByteBuffer.allocate(4);
-			pps.putInt(frame.tag.size + 11);
-			byte[] ppsbs = pps.array();
-
-			byte[] pk = new byte[thbs.length + data.length + ppsbs.length];
-			System.arraycopy(thbs, 0, pk, 0, thbs.length);
-			System.arraycopy(data, 0, pk, thbs.length, data.length);
-			System.arraycopy(ppsbs, 0, pk, thbs.length + data.length, ppsbs.length);
-
-			if (frame.is_keyframe()) {
-				Log.i(Constants.TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB, tag_size=%#x, time=%#x",
-						frame.type, frame.dts, frame.tag.size, tag_size, time
-						));
-			}
-
-			int result = _write(pk, pk.length);
-			bos.write(pk);
-			if (result != pk.length) {
-				Log.e("guoli", "write result code :" + result + "   length :" + pk.length);
-				System.exit(-1);
-			}
+			// pps.rewind();
+			// pps.putInt(frame.tag.size + 11);
+			// byte[] ppsbs = pps.array();
+			// _write(ppsbs, ppsbs.length);
 		}
-		bos.flush();
 	}
 
 	private native int _set_output_url(String url);
@@ -393,4 +353,31 @@ public class KSYRtmpFlvClient {
 	private native int _close();
 
 	private native int _write(byte[] buffer, int size);
+
+	private void write(byte[] buffer, Boolean video) {
+
+		if (buffer == null || buffer.length <= 0)
+			return;
+		if (video) {
+			int result = _write(buffer, buffer.length);
+			if (result != buffer.length) {
+				Log.e("guoli", "write result code :" + result + "   length :" + cachedSize);
+				System.exit(-1);
+			}
+			return;
+		}
+		if (buffer.length > (cachedBuffer.length - cachedSize)) {
+			int result = _write(cachedBuffer, cachedSize);
+			if (result != cachedSize) {
+				Log.e("guoli", "write result code :" + result + "   length :" + cachedSize);
+				System.exit(-1);
+			}
+			cachedSize = 0;
+		}
+
+		System.arraycopy(buffer, 0, cachedBuffer, cachedSize, buffer.length);
+		cachedSize += buffer.length;
+
+	}
+
 }

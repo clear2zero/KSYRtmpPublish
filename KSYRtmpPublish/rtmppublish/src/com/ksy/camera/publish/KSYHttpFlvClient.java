@@ -79,7 +79,7 @@ public class KSYHttpFlvClient {
 	 * @param size
 	 *            the total size of bytes to print.
 	 */
-	public static void srs_print_bytes(String tag, ByteBuffer bb, int size) {
+	public static void KSY_print_bytes(String tag, ByteBuffer bb, int size) {
 
 		StringBuilder sb = new StringBuilder();
 		int i = 0;
@@ -97,7 +97,7 @@ public class KSYHttpFlvClient {
 		}
 	}
 
-	public static void srs_print_bytes(String tag, byte[] bb, int size) {
+	public static void KSY_print_bytes(String tag, byte[] bb, int size) {
 
 		StringBuilder sb = new StringBuilder();
 		int i = 0;
@@ -207,6 +207,7 @@ public class KSYHttpFlvClient {
 	 * @param bufferInfo
 	 *            The buffer information related to this sample.
 	 */
+
 	public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) throws Exception {
 
 		// Log.i(TAG, String.format("dumps the %s stream %dB, pts=%d",
@@ -215,7 +216,7 @@ public class KSYHttpFlvClient {
 		// SrsHttpFlv.srs_print_bytes(TAG, byteBuf, bufferInfo.size);
 
 		if (bufferInfo.offset > 0) {
-			Log.w(Constants.TAG, String.format("encoded frame %dB, offset=%d pts=%dms", bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs / 1000));
+			Log.w(Constants.TAG, String.format("encoded frame %dB, offset=%d pts=%dms", bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs));
 		}
 
 		if (VIDEO_TRACK == trackIndex) {
