@@ -72,10 +72,10 @@ public class MainActivity extends Activity {
 	private int vtrack;
 	private int vcolor;
 
-	// private String flv_url = "rtmp://192.168.135.185/myLive/drm7";
+	 private String flv_url = "rtmp://192.168.135.185/myLive/drm7";
 	// private String flv_url = "rtmp://115.231.96.121/xiaoyi/ksyun_test";
 	// private String flv_url = "rtmp://115.231.96.121/xiaoyi/ksyun_test";
-	private String flv_url = "rtmp://115.231.96.121/xiaoyi/ksyun_test";
+	//private String flv_url = "rtmp://115.231.96.121/xiaoyi/ksyun_test";
 	// private String flv_url = "http://ossrs.net:8936/live/livestream.flv";
 	// private String flv_url = "http://192.168.1.137:8936/live/livestream.flv";
 	// private String flv_url = "http://192.168.2.111:8936/live/livestream.flv";
@@ -247,14 +247,8 @@ public class MainActivity extends Activity {
 			Log.e(TAG, String.format("flv url must starts with http://, actual is %s", flv_url));
 			return;
 		}
-		// if (!flv_url.endsWith(".flv")) {
-		// Log.e(TAG, String.format("flv url must ends with .flv, actual is %s",
-		// flv_url));
-		// return;
-		// }
 
-		// start the muxer to POST stream to SRS over HTTP FLV.
-		muxer = new KSYRtmpFlvClient(flv_url);
+				muxer = new KSYRtmpFlvClient(flv_url);
 		try {
 			muxer.start();
 		} catch (IOException e) {
@@ -262,7 +256,6 @@ public class MainActivity extends Activity {
 			e.printStackTrace();
 			return;
 		}
-		Log.i(TAG, String.format("start muxer to SRS over HTTP FLV, url=%s", flv_url));
 
 		// the pts for video and audio encoder.
 		presentationTimeUs = new Date().getTime();
@@ -509,7 +502,7 @@ public class MainActivity extends Activity {
 			return;
 		while (vloop && vencoder != null && !Thread.interrupted()) {
 			ByteBuffer[] outBuffers = vencoder.getOutputBuffers();
-			int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, VDURATION / 2);
+			int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, VDURATION / 4);
 			// Log.i(TAG,
 			// String.format("try to dequeue output vbuffer, ii=%d, oi=%d",
 			// inBufferIndex, outBufferIndex));
@@ -655,19 +648,19 @@ public class MainActivity extends Activity {
 	private void onGetYuvFrame(byte[] data, long pts) {
 
 		// Log.i(TAG, String.format("got YUV image, size=%d", data.length));
-		if (cur_frame_num > 0) {
-			delta = curpts - prepts;
-			// if(delta < VDURATION / 3) {
-			// Log.i("guoli",String.format("onPreviewFrame DROP FRAME frame_num:%d realtime:%d pretime:%d delta=%d",
-			// cur_frame_num, curpts, prepts, curpts - prepts));
-			// camera.addCallbackBuffer(data);
-			// return;
-			// }
-			delta = get_delta((int) (cur_frame_num % delta_count), delta);
-		} else {
-			// prepts_set = curpts;
-			delta = 0;
-		}
+//		if (cur_frame_num > 0) {
+//			delta = curpts - prepts;
+//			// if(delta < VDURATION / 3) {
+//			// Log.i("guoli",String.format("onPreviewFrame DROP FRAME frame_num:%d realtime:%d pretime:%d delta=%d",
+//			// cur_frame_num, curpts, prepts, curpts - prepts));
+//			// camera.addCallbackBuffer(data);
+//			// return;
+//			// }
+//			delta = get_delta((int) (cur_frame_num % delta_count), delta);
+//		} else {
+//			// prepts_set = curpts;
+//			delta = 0;
+//		}
 
 		cur_frame_num++;
 
